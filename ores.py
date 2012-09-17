@@ -11,8 +11,10 @@ class Ore(object):
     price_per_batch = 0.0
     materials = dict([(material.name, material) for material in materials])
     for mineral_name, quantity in self.refines.items():
-      mineral = materials[mineral_name]
-      price_per_batch += quantity * mineral.buy_price
+      # TODO: complain if one of the minerals doesn't exist yet.
+      mineral = materials.get(mineral_name)
+      if mineral:
+        price_per_batch += quantity * mineral.buy_price
     # Yields at Refining V & Refining Efficiency III work out to
     # 81.2%; after 3.75% tax on the result, that's ~78%.
     result = 0.75 * price_per_batch / self.batch_size

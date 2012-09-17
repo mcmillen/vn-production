@@ -1,23 +1,27 @@
-import locale
+# TODO: change all prices to integer ISK-cents?
+# TODO: make capitalization of function names consistent
+
+import json
+import logging
 
 import bottle
 from bottle import *
 from google.appengine.api import users
 
+import evelink.appengine
+
 import models
 import ores
 
-# TODO: favicon.ico
-# TODO: use templates instead of LOL HTML
 
 app = Bottle()
 
 
-def is_current_user_admin():
+def IsCurrentUserAdmin():
   return users.is_current_user_admin()
 
 
-def format_number(amount):
+def FormatNumber(amount):
   amount = int(amount)
   result = ''
   if amount == 0:
@@ -38,45 +42,23 @@ def home():
 
 @app.get('/materials/add')
 def add_material_page():
-    return """
-<html>
-<body>
-<form action="/materials/edit" method="POST">
-Name: <input type="text" name="name"><br>
-Item type: <input type="text" name="item_type"><br>
-Buy price: <input type="text" name="buy_price"><br>
-Desired quantity: <input type="text" name="desired_quantity"><br>
-<input type="Submit">
-</form>
-</body>
-</html>
-"""
+  return template('add_material')
 
 
 @app.get('/materials/edit/<name>')
 def edit_material_page(name):
+  if not IsCurrentUserAdmin():
+    abort(403)
   material = models.Material.all().filter('name =', name).get()
   if not material:
-    return ''
-  return """
-<html>
-<body>
-<b>Editing %s</b>
-<form action="/materials/edit" method="POST">
-<input type="hidden" name="name" value="%s"><br>
-Item type: <input type="text" name="item_type" value="%d"><br>
-Buy price: <input type="text" name="buy_price" value="%.2f"><br>
-Desired quantity: <input type="text" name="desired_quantity" value="%d"><br>
-<input type="Submit">
-</form>
-</body>
-</html>
-""" % (name, name, material.item_type, material.buy_price or 0,
-       material.desired_quantity or 0)
+    abort(404)
+  return template('edit_material', material=material)
 
 
 @app.post('/materials/edit')
 def edit_material_submit():
+  if not IsCurrentUserAdmin():
+    abort(403)
   name = request.forms.get('name')
   item_type = int(request.forms.get('item_type'))
   try:
@@ -101,41 +83,27 @@ def edit_material_submit():
 @app.get('/materials')
 def materials_page():
   materials = models.Material.all().order('item_type')
-  result = '<html><body><font face="sans-serif"><form action="/materials/compute" method="post">'
-  result += '<input type="submit" value="Compute Value">'
-  result += '<table><tr>'
-  result += '<tr><th>Material</th><th>Price</th>'
-  result += '<th>Quantity</th>'
-  if is_current_user_admin():
-    result += '<th>Desired Quantity</th><th></th>'
-  result += '</tr>'
-  for material in materials:
-    buy_price_str = 'N/A'
-    if material.buy_price:
-      buy_price_str = '%.2f' % material.buy_price
-    result += '<tr><td>%s</td><td>%s</td>' % (
-        material.name, buy_price_str)
-    result += '<td><input type="text" name="%s" size="10"></td>' % (
-        material.name)
-    if is_current_user_admin():
-      result += '<td>%s</td>' % material.desired_quantity
-      result += '<td><a href="/materials/edit/%s">Edit</a></td>' % (
-          material.name)
-      result += '</tr>'
+  item_quantities = GetItemQuantities()
+
+  ore_data = []
   for ore_name in sorted(ores.ORES):
-    result += '<tr><td>&nbsp;</td></tr>'
     ore = ores.ORES[ore_name]
+    variants = []
     for ore_variant in [ore.name, ore.name5, ore.name10]:
       buy_price = ore.calculate_buy_price(materials, ore_variant)
-      result += '<tr><td>%s</td><td>%.2f (%.2f/m<sup>3</sup>)</td>' % (
-          ore_variant, buy_price, buy_price / ore.volume)
-      result += '<td><input type="text" name="%s" size="10"></td></tr>' % (
-          ore_variant)
-  result += '</table></form></font></body></html>'
-  return result
+      variants.append((ore_variant, buy_price, buy_price / ore.volume))
+    ore_data.append((ore_name, variants))
+  if request.query.get('format') == 'json':
+    return dict((material.name, material.ToDict(
+          item_quantities.get(material.name, 0))) for material in materials)
+  return template('materials',
+                  is_current_user_admin=IsCurrentUserAdmin(),
+                  materials=materials,
+                  ores=ore_data,
+                  item_quantities=item_quantities)
 
 
-def get_buy_price(materials, name):
+def GetBuyPrice(materials, name):
   ore_name = name.split()[-1]
   if ore_name == 'Ochre':
     ore_name = 'Dark Ochre'
@@ -143,31 +111,102 @@ def get_buy_price(materials, name):
     return ores.ORES[ore_name].calculate_buy_price(materials, name)
   materials = dict([(material.name, material) for material in materials])
   if name not in materials:
-    # TODO: error?
-    return 0.0
+    abort(400, 'Invalid material: %s' % name)
   return materials[name].buy_price
 
 
 @app.post('/materials/compute')
 def materials_compute():
   materials = models.Material.all().fetch(10000)
-  result = '<html><body><font face="sans-serif">'
+  # List of (material name, buy price, quantity, value).
+  result = []
   total_value = 0.0
   for name in sorted(request.forms):
     quantity = request.forms[name]
+    if not quantity:
+      continue
     try:
       quantity = int(quantity)
     except ValueError:
-      continue  # TODO: show the user an error
-    buy_price = get_buy_price(materials, name)
+      abort(400, 'Invalid quantity of %s' % name)
+    buy_price = GetBuyPrice(materials, name)
     value = buy_price * quantity
     total_value += value
-    result += '%s @ %.2f x %s: %s<br>' % (
-        name, buy_price, format_number(quantity), format_number(value))
-  result += '<br>Total value: <b>%s</b> ISK' % format_number(total_value)
-  result += '<p>To buy this stuff from corp, the price is: '
-  result += '<b>%s</b> ISK' % format_number(total_value * 1.05)
-  return result
+    result.append((name,
+                   buy_price,
+                   FormatNumber(quantity),
+                   FormatNumber(value)))
+  return template('compute_materials.html',
+                  materials=result,
+                  buy_price=FormatNumber(total_value),
+                  sell_price=FormatNumber(total_value * 1.05))
+
+
+@app.get('/login')
+def login():
+  redirect('/')
+
+
+# TODO: remove this, replace with datastore
+production_item_types = {
+  597: 'Punisher',
+  603: 'Merlin',
+  594: 'Incursus',
+  11132: 'Minmatar Shuttle',
+  24702: 'Hurricane',
+  633: 'Celestis',
+  657: 'Iteron Mark V',
+  585: 'Slasher',
+  24700: 'Myrmidon',
+  16240: 'Catalyst',
+  629: 'Rupture',
+  627: 'Thorax',
+  17478: 'Retriever',
+  645: 'Dominix',
+  16238: 'Cormorant',
+  16242: 'Thrasher',
+  587: 'Rifter',
+  24698: 'Drake',
+  16236: 'Coercer',
+  632: 'Blackbird',
+  620: 'Osprey',
+  626: 'Vexor',
+  16229: 'Brutix',
+}
+
+
+def GetItemQuantities():
+  materials = models.Material.all().order('item_type')
+  material_item_types = dict((m.item_type, m.name) for m in materials)
+
+  api_key = models.ApiKey().all().get()
+  api_key = (api_key.key_id, api_key.verification_code)
+  api = evelink.appengine.AppEngineAPI(api_key=api_key)
+  corp = evelink.corp.Corp(api=api)
+
+  items = corp.assets().values()
+  item_quantities = {}
+  while items:
+    item = items.pop()
+    if 'contents' in item:
+      items.extend(item['contents'])
+    if item.get('location_flag') == 0:
+      continue
+    # TODO: add ore
+    if item.get('item_type_id') in material_item_types:
+      name = material_item_types[item.get('item_type_id')]
+      item_quantities.setdefault(name, 0)
+      item_quantities[name] += item['quantity']
+    if item.get('item_type_id') in production_item_types:
+      name = production_item_types[item.get('item_type_id')]
+      item_quantities.setdefault(name, 0)
+      item_quantities[name] += item['quantity']
+  return item_quantities
+
+
+@app.get('/experimental/itemquantities')
+def gaetest():
+  return json.dumps(GetItemQuantities())
 
 
 bottle.run(app=app, server='gae')

@@ -1,0 +1,38 @@
+<html><body><font face="sans-serif"><form action="/materials/compute" method="post">
+<input type="submit" value="Compute Value">
+<table>
+<tr>
+  <th>Material</th><th>Corp Buys At</th><th>Corp Sells At</th><th>Quantity</th><th>Current Stock</th><th># Available For Purchase</th>
+
+%if is_current_user_admin:
+<th></th>
+%end
+</tr>
+
+%for material in materials:
+<tr>
+  <td>{{ material.name }}</td>
+  <td>{{ "%.2f" % material.buy_price }}</td>
+  <td>{{ "%.2f" % (material.buy_price * 1.05) }}</td>
+  <td><input type="text" name="{{ material.name }}" size="10"></td>
+  <td>{{ '%.1f%%' % (100.0 * item_quantities.get(material.name, 0) / material.desired_quantity) }}</td>
+  <td>{{ max(0, item_quantities.get(material.name, 0) - material.desired_quantity) }}
+%if is_current_user_admin:
+  <td><a href="/materials/edit/{{ material.name }}">Edit</a></td>
+%end
+</tr>
+%end
+
+%for ore in ores:
+  <tr><td>&nbsp;</td></tr>
+%  for ore_variant in ore[1]:
+<tr>
+  <td>{{ ore_variant[0] }}</td>
+  <td>{{ "%.2f" % ore_variant[1] }} ({{ "%.2f" % ore_variant[2] }}/m<sup>3</sup>)</td>
+  <td></td>
+  <td><input type="text" name="{{ ore_variant[0] }}" size="10"></td>
+</tr>
+%end
+%end
+
+</table></form></font></body></html>

@@ -1,10 +1,19 @@
 application: vn-production
-version: 2
+version: 3
 runtime: python27
 api_version: 1
 threadsafe: true
 
 handlers:
+- url: /favicon\.ico
+  static_files: static/favicon.ico
+  upload: static/favicon.ico
+
+- url: /login
+  script: handlers.app
+  secure: always
+  login: required
+
 - url: .*
   script: handlers.app
   secure: always
