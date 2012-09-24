@@ -19,7 +19,7 @@ class Material(object):
     model = self._fetch_model()
     result = {'buy_price': model.buy_price,
               'desired_quantity': model.desired_quantity}
-    memcache.set(self._cache_key, result, 15 * 60)
+    memcache.set(self._cache_key, result, 60 * 60 * 24)
     return result
 
   def _fetch_model(self):
@@ -33,7 +33,7 @@ class Material(object):
     material.put()
     return material
 
-  def ToDict(self, current_quantity=None):
+  def to_dict(self, current_quantity=None):
     return {'name': self.name,
             'item_type': self.item_type,
             'buy_price': self.buy_price,

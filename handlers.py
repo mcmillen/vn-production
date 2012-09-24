@@ -91,7 +91,7 @@ def materials_page():
       variants.append((ore_variant, buy_price, buy_price / ore.volume))
     ore_data.append((ore_name, variants))
   if request.query.get('format') == 'json':
-    return dict((material.name, material.ToDict(
+    return dict((material.name, material.to_dict(
           item_quantities.get(material.name, 0))) for material in materials)
   return template('materials',
                   is_current_user_admin=is_current_user_admin(),
