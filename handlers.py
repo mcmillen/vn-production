@@ -1,5 +1,4 @@
 # TODO: change all prices to integer ISK-cents?
-# TODO: make capitalization of function names consistent
 
 import json
 import logging
@@ -10,6 +9,7 @@ from google.appengine.api import users
 
 import evelink.appengine
 
+import item_db
 import models
 import ores
 
@@ -17,11 +17,11 @@ import ores
 app = Bottle()
 
 
-def IsCurrentUserAdmin():
+def is_current_user_admin():
   return users.is_current_user_admin()
 
 
-def FormatNumber(amount):
+def format_number(amount):
   amount = int(amount)
   result = ''
   if amount == 0:
@@ -47,9 +47,9 @@ def add_material_page():
 
 @app.get('/materials/edit/<name>')
 def edit_material_page(name):
-  if not IsCurrentUserAdmin():
+  if not is_current_user_admin():
     abort(403)
-  material = models.Material.all().filter('name =', name).get()
+  material = item_db.get(name)
   if not material:
     abort(404)
   return template('edit_material', material=material)
@@ -57,10 +57,9 @@ def edit_material_page(name):
 
 @app.post('/materials/edit')
 def edit_material_submit():
-  if not IsCurrentUserAdmin():
+  if not is_current_user_admin():
     abort(403)
   name = request.forms.get('name')
-  item_type = int(request.forms.get('item_type'))
   try:
     buy_price = float(request.forms.get('buy_price', ''))
   except ValueError:
@@ -69,21 +68,19 @@ def edit_material_submit():
     desired_quantity = int(request.forms.get('desired_quantity', ''))
   except ValueError:
     desired_quantity = 0
-  material = models.Material.all().filter('name =', name).get()
+  material = item_db.get(name)
   if not material:
-    material = models.Material()
-  material.name = name
-  material.item_type = item_type
+    abort(404)
   material.buy_price = buy_price
   material.desired_quantity = desired_quantity
-  material.put()
   redirect('/materials')
 
 
 @app.get('/materials')
 def materials_page():
-  materials = models.Material.all().order('item_type')
-  item_quantities = GetItemQuantities()
+  materials = item_db.all_materials()
+  salvage = item_db.all_salvage()
+  item_quantities = get_item_quantities()
 
   ore_data = []
   for ore_name in sorted(ores.ORES):
@@ -97,13 +94,14 @@ def materials_page():
     return dict((material.name, material.ToDict(
           item_quantities.get(material.name, 0))) for material in materials)
   return template('materials',
-                  is_current_user_admin=IsCurrentUserAdmin(),
+                  is_current_user_admin=is_current_user_admin(),
                   materials=materials,
+                  salvage=salvage,
                   ores=ore_data,
                   item_quantities=item_quantities)
 
 
-def GetBuyPrice(materials, name):
+def get_buy_price(materials, name):
   ore_name = name.split()[-1]
   if ore_name == 'Ochre':
     ore_name = 'Dark Ochre'
@@ -117,7 +115,7 @@ def GetBuyPrice(materials, name):
 
 @app.post('/materials/compute')
 def materials_compute():
-  materials = models.Material.all().fetch(10000)
+  materials = item_db.all()
   # List of (material name, buy price, quantity, value).
   result = []
   total_value = 0.0
@@ -129,17 +127,17 @@ def materials_compute():
       quantity = int(quantity)
     except ValueError:
       abort(400, 'Invalid quantity of %s' % name)
-    buy_price = GetBuyPrice(materials, name)
+    buy_price = get_buy_price(materials, name)
     value = buy_price * quantity
     total_value += value
     result.append((name,
                    buy_price,
-                   FormatNumber(quantity),
-                   FormatNumber(value)))
+                   format_number(quantity),
+                   format_number(value)))
   return template('compute_materials.html',
                   materials=result,
-                  buy_price=FormatNumber(total_value),
-                  sell_price=FormatNumber(total_value * 1.05))
+                  buy_price=format_number(total_value),
+                  sell_price=format_number(total_value * 1.05))
 
 
 @app.get('/login')
@@ -175,8 +173,8 @@ production_item_types = {
 }
 
 
-def GetItemQuantities():
-  materials = models.Material.all().order('item_type')
+def get_item_quantities():
+  materials = item_db.all()
   material_item_types = dict((m.item_type, m.name) for m in materials)
 
   api_key = models.ApiKey().all().get()
@@ -206,7 +204,7 @@ def GetItemQuantities():
 
 @app.get('/experimental/itemquantities')
 def gaetest():
-  return json.dumps(GetItemQuantities())
+  return json.dumps(get_item_quantities())
 
 
 bottle.run(app=app, server='gae')
