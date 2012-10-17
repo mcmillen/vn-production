@@ -1,5 +1,3 @@
-# TODO: change all prices to integer ISK-cents?
-
 import json
 import logging
 
@@ -145,34 +143,6 @@ def login():
   redirect('/')
 
 
-# TODO: remove this, replace with datastore
-production_item_types = {
-  597: 'Punisher',
-  603: 'Merlin',
-  594: 'Incursus',
-  11132: 'Minmatar Shuttle',
-  24702: 'Hurricane',
-  633: 'Celestis',
-  657: 'Iteron Mark V',
-  585: 'Slasher',
-  24700: 'Myrmidon',
-  16240: 'Catalyst',
-  629: 'Rupture',
-  627: 'Thorax',
-  17478: 'Retriever',
-  645: 'Dominix',
-  16238: 'Cormorant',
-  16242: 'Thrasher',
-  587: 'Rifter',
-  24698: 'Drake',
-  16236: 'Coercer',
-  632: 'Blackbird',
-  620: 'Osprey',
-  626: 'Vexor',
-  16229: 'Brutix',
-}
-
-
 def get_item_quantities():
   materials = item_db.all()
   material_item_types = dict((m.item_type, m.name) for m in materials)
@@ -195,16 +165,19 @@ def get_item_quantities():
       name = material_item_types[item.get('item_type_id')]
       item_quantities.setdefault(name, 0)
       item_quantities[name] += item['quantity']
-    if item.get('item_type_id') in production_item_types:
-      name = production_item_types[item.get('item_type_id')]
-      item_quantities.setdefault(name, 0)
-      item_quantities[name] += item['quantity']
   return item_quantities
 
 
 @app.get('/experimental/itemquantities')
 def gaetest():
   return json.dumps(get_item_quantities())
+
+
+@app.get('/ships')
+def ships():
+  ships = item_db.all_ships()
+  ships.sort(key=lambda s: s.sell_price(5), reverse=True)
+  return template('ships', ships=ships, formatter=format_number)
 
 
 bottle.run(app=app, server='gae')

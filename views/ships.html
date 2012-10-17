@@ -1,0 +1,13 @@
+<html><body><font face="sans-serif">
+<table>
+<tr>
+  <th>Ship</th><th>Corp Sells At</th>
+
+%for ship in ships:
+<tr>
+  <td>{{ ship.name }}</td>
+  <td>{{ formatter(ship.sell_price(5)) }}</td>
+</tr>
+%end
+
+</table></font></body></html>
