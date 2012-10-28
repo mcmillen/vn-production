@@ -4,11 +4,15 @@ import logging
 import models
 
 
-class Material(object):
-  def __init__(self, name, item_type):
+class Item(object):
+  def __init__(self, name, item_type, needed_materials=None):
     self._name = name
     self._item_type = item_type
     self._cache_key = 'material-%s' % self._name
+    if needed_materials:
+      self._needed_materials = needed_materials
+    else:
+      self._needed_materials = []
 
   def _fetch_data(self):
     result = memcache.get(self._cache_key)
@@ -49,7 +53,7 @@ class Material(object):
     return self._item_type
 
   @property
-  def buy_price(self):  
+  def buy_price(self):
     return self._fetch_data().get('buy_price', 0)
 
   @buy_price.setter
@@ -73,6 +77,41 @@ class Material(object):
     model = self._fetch_model()
     model.desired_quantity = value
     model.put()
+
+
+class Material(Item):
+  pass
+
+
+class Module(Item):
+  pass
+
+
+class Ship(Item):
+  def production_materials(self, material_efficiency):
+    result = {}
+    for material, base_quantity in self._needed_materials.items():
+      quantity = base_quantity * (1.0 + 0.1 / (material_efficiency + 1))
+      quantity = int(round(quantity))
+      result[material] = quantity
+    return result
+
+  @property
+  def buy_price(self):
+    material_efficiency = 5
+    materials = self.production_materials(material_efficiency)
+    total_cost = 0.0
+    for material_id, quantity in materials.items():
+      total_cost += quantity * get(material_id).buy_price
+    return int(total_cost)
+
+  @buy_price.setter
+  def buy_price(self, value):
+    pass  # Intentional no-op.  Buy price is computed from materials, per above.
+
+  @property
+  def sell_price(self):
+    return int(self.buy_price * 1.1)
 
 
 _ITEMS_BY_TYPE = {}
@@ -118,40 +157,6 @@ _salvage = [
 
 _SALVAGE = dict((m.name, m) for m in _salvage)
 _ITEMS_BY_TYPE.update((m.item_type, m) for m in _salvage)
-
-
-# TODO: it feels like Ship and Material should share some code.
-class Ship(object):
-  def __init__(self, name, item_type, needed_materials):
-    self._name = name
-    self._item_type = item_type
-    self._needed_materials = needed_materials
-
-  @property
-  def name(self):
-    return self._name
-
-  @property
-  def item_type(self):
-    return self._item_type
-
-  def production_materials(self, material_efficiency):
-    result = {}
-    for material, base_quantity in self._needed_materials.items():
-      quantity = base_quantity * (1.0 + 0.1 / (material_efficiency + 1))
-      quantity = int(round(quantity))
-      result[material] = quantity
-    return result
-
-  def buy_price(self, material_efficiency):
-    materials = self.production_materials(material_efficiency)
-    total_cost = 0.0
-    for material_id, quantity in materials.items():
-      total_cost += quantity * get(material_id).buy_price
-    return int(total_cost)
-
-  def sell_price(self, material_efficiency):
-    return int(self.buy_price(material_efficiency) * 1.1)
 
 
 # TODO: Make sure minerals taken from the newest DB dump.
@@ -251,9 +256,46 @@ _SHIPS = dict((m.name, m) for m in _ships)
 _ITEMS_BY_TYPE.update((m.item_type, m) for m in _ships)
 
 
+_modules = [
+    Module("Small F-S9 Regolith Shield Induction", 8521),
+    Module("Medium F-S9 Regolith Shield Induction", 8517),
+    Module("Medium Azeotropic Ward Salubrity I", 8433),
+    Module("Large F-S9 Regolith Shield Induction", 8529),
+    Module("425mm Medium 'Scout' Autocannon I", 9135),
+    Module("425mm Medium Prototype Automatic Cannon", 9141),
+    Module("720mm 'Scout' Artillery I", 9451),
+    Module("720mm Prototype Siege Cannon", 9457),
+    Module("Fleeting Propulsion Inhibitor I", 4027),
+    Module("X5 Prototype Engine Enervator", 4025),
+    Module("Faint Warp Disruptor I", 5403),
+    Module("J5 Prototype Warp Disruptor I", 5399),
+    Module("Faint Epsilon Warp Scrambler I", 5443),
+    Module("J5b Phased Prototype Warp Scrambler I", 5439),
+    Module("Local Hull Conversion Nanofiber Structure I", 5561),
+    Module("Limited Adaptive Invulnerability Field I", 9632),
+    Module("Limited 'Anointed' EM Ward Field", 9622),
+    Module("Limited Thermic Dissipation Field I", 9660),
+    Module("Counterbalanced Weapon Mounts I", 5933),
+    Module("Magnetic Field Stabilizer I", 9944),
+    Module("Republic Fleet Phased Plasma M", 21922 ),
+    Module("Republic Fleet EMP M", 21896),
+    Module("250mm Prototype Gauss Gun", 7367),
+    Module("Experimental 1MN Afterburner I", 6003),
+    Module("Limited 1MN Microwarpdrive I", 5973),
+    Module("Experimental 10MN Afterburner I", 6005),
+    Module("Experimental 10MN Microwarpdrive I", 5975),
+    Module("F-23 Reciprocal Sensor Cluster Link", 5279),
+    Module("Fourier Transform Tracking Program", 6325),
+]
+
+
+_MODULES = dict((m.name, m) for m in _modules)
+_ITEMS_BY_TYPE.update((m.item_type, m) for m in _modules)
+
+
 # TODO: make a more general function for querying items.
 def all_materials():
-  return sorted(_MATERIALS.values(), key=lambda m: m.item_type)
+  return sorted(_MATERIALS.values(), key=lambda m: m.name)
 
 
 def get_material(name):
@@ -276,14 +318,20 @@ def get_ship(name):
   return _SHIPS.get(name)
 
 
+def all_modules():
+  return sorted(_MODULES.values(), key=lambda m: m.name)
+
+
+def get_module(name):
+  return _MODULES.get(name)
+
+
 def get(name):
   if isinstance(name, int):
     return _ITEMS_BY_TYPE.get(name)
   else:
-    return get_material(name) or get_salvage(name) or get_ship(name) or None
+    return get_material(name) or get_salvage(name) or get_ship(name) or get_module(name) or None
 
 
 def all():
-  return all_materials() + all_salvage() + all_ships()
-
-
+  return all_materials() + all_salvage() + all_ships() + all_modules()

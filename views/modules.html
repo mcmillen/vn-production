@@ -1,0 +1,30 @@
+%include header
+
+<table>
+<tr>
+  <th>Module</th><th>Available</th><th>Desired Quantity</th>
+%if is_current_user_admin:
+<th></th>
+%end
+
+%for module in modules:
+<tr>
+  <td>{{ module.name }}</td>
+  <td>{{ item_quantities.get(module.name, 0) }}
+  <td>
+  %if item_quantities.get(module.name, 0) < module.desired_quantity:
+    <font color="#f00">{{ module.desired_quantity }}</font>
+  %else:
+    {{ module.desired_quantity }}
+  %end
+  </td>
+%if is_current_user_admin:
+  <td><a href="/materials/edit/{{ module.name }}">Edit</a></td>
+%end
+
+</tr>
+%end
+
+</table>
+
+%include footer

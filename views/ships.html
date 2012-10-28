@@ -1,13 +1,36 @@
-<html><body><font face="sans-serif">
+%include header
+
 <table>
 <tr>
-  <th>Ship</th><th>Corp Sells At</th>
+  <th>Ship</th><th>Corp Sells At</th><th>Available</th><th>Desired Quantity</th>
+%if is_current_user_admin:
+<th></th>
+%end
 
 %for ship in ships:
 <tr>
   <td>{{ ship.name }}</td>
-  <td>{{ formatter(ship.sell_price(5)) }}</td>
+  <td>{{ formatter(ship.sell_price) }}</td>
+  <td>{{ item_quantities.get(ship.name, "-") }}
+  <td>
+  %if item_quantities.get(ship.name, 0) < ship.desired_quantity:
+    <font color="#f00">{{ ship.desired_quantity }}</font>
+  %else:
+    %if ship.desired_quantity:
+      {{ ship.desired_quantity }}
+    %else:
+      -
+    %end
+  %end
+  </td>
+
+%if is_current_user_admin:
+  <td><a href="/materials/edit/{{ ship.name }}">Edit</a></td>
+%end
+
 </tr>
 %end
 
-</table></font></body></html>
+</table>
+
+%include footer

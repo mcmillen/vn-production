@@ -1,4 +1,4 @@
-<html><body><font face="sans-serif">
+%include header
 
 %for material in materials:
   {{ material[0] }} @ {{ "%.2f" % material[1] }} x {{ material[2] }}:
@@ -8,4 +8,4 @@
 <br>Total value: <b>{{ buy_price }}</b> ISK.
 <p>To buy this stuff from corp, the price is: <b>{{ sell_price }}</b> ISK.
 
-</body></html>
+%include footer

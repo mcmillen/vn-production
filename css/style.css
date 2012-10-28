@@ -1,0 +1,10 @@
+body,p,td,th,input {
+		font-family: sans-serif;
+		font-size: 10pt;
+		background-color: black;
+		color: white;
+}
+
+a,a.visited {
+		color: yellow;
+}
