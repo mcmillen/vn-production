@@ -1,5 +1,5 @@
-<html>
-<body>
+%include header
+
 <b>Editing {{ material.name }}</b>
 <form action="/materials/edit" method="POST">
 <input type="hidden" name="name" value="{{ material.name }}"><br>
@@ -7,5 +7,5 @@ Buy price: <input type="text" name="buy_price" value="{{ material.buy_price }}">
 Desired quantity: <input type="text" name="desired_quantity" value="{{ material.desired_quantity }}">
 <input type="Submit">
 </form>
-</body>
-</html>
+
+%include footer

@@ -71,7 +71,12 @@ def edit_material_submit():
     abort(404)
   material.buy_price = buy_price
   material.desired_quantity = desired_quantity
-  redirect('/materials')
+  if isinstance(material, item_db.Ship):
+    redirect('/ships')
+  elif isinstance(material, item_db.Module):
+    redirect('/modules')
+  else:
+    redirect('/materials')
 
 
 @app.get('/materials')
@@ -132,10 +137,35 @@ def materials_compute():
                    buy_price,
                    format_number(quantity),
                    format_number(value)))
+  # TODO: add sell_price to Item and use that instead of hard-coding 1.05 here.
   return template('compute_materials.html',
                   materials=result,
                   buy_price=format_number(total_value),
                   sell_price=format_number(total_value * 1.05))
+
+
+@app.get('/ships')
+def ships():
+  item_quantities = get_item_quantities()
+  ships = item_db.all_ships()
+  def sort_key(ship):
+    if item_quantities.get(ship.name) or ship.desired_quantity > 0:
+      return ship.buy_price
+    else:
+      return ship.buy_price - 1000000000
+  ships.sort(key=sort_key, reverse=True)
+  return template('ships', ships=ships, formatter=format_number,
+                  item_quantities=item_quantities,
+                  is_current_user_admin=is_current_user_admin())
+
+
+@app.get('/modules')
+def modules():
+  item_quantities = get_item_quantities()
+  modules = item_db.all_modules()
+  return template('modules', modules=modules,
+                  item_quantities=item_quantities,
+                  is_current_user_admin=is_current_user_admin())
 
 
 @app.get('/login')
@@ -166,18 +196,6 @@ def get_item_quantities():
       item_quantities.setdefault(name, 0)
       item_quantities[name] += item['quantity']
   return item_quantities
-
-
-@app.get('/experimental/itemquantities')
-def gaetest():
-  return json.dumps(get_item_quantities())
-
-
-@app.get('/ships')
-def ships():
-  ships = item_db.all_ships()
-  ships.sort(key=lambda s: s.sell_price(5), reverse=True)
-  return template('ships', ships=ships, formatter=format_number)
 
 
 bottle.run(app=app, server='gae')
