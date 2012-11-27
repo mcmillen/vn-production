@@ -15,9 +15,8 @@ class Ore(object):
       mineral = materials.get(mineral_name)
       if mineral:
         price_per_batch += quantity * mineral.buy_price
-    # Yields at Refining V & Refining Efficiency III work out to
-    # 81.2%; after 3.75% tax on the result, that's ~78%.
-    result = 0.75 * price_per_batch / self.batch_size
+    # We shouldn't lose money on this assuming that refiners have 5/4/3.
+    result = 0.9 * price_per_batch / self.batch_size
     if name == self.name10:
       return 1.1 * result
     elif name == self.name5:
