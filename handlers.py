@@ -82,7 +82,6 @@ def edit_material_submit():
 @app.get('/materials')
 def materials_page():
   materials = item_db.all_materials()
-  salvage = item_db.all_salvage()
   item_quantities = get_item_quantities()
 
   ore_data = []
@@ -99,7 +98,7 @@ def materials_page():
   return template('materials',
                   is_current_user_admin=is_current_user_admin(),
                   materials=materials,
-                  salvage=salvage,
+                  salvage=[],
                   ores=ore_data,
                   item_quantities=item_quantities)
 

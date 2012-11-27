@@ -1,5 +1,5 @@
 application: vn-production
-version: ui-tweaks
+version: ore-values
 runtime: python27
 api_version: 1
 threadsafe: true
