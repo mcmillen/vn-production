@@ -210,6 +210,7 @@ _SALVAGE = dict((m.name, m) for m in _salvage)
 _ITEMS_BY_TYPE.update((m.item_type, m) for m in _salvage)
 
 
+# TODO: import ships from a separate file instead of pasting them here.
 _ships = [
     Ship('Abaddon', 24692, {34: 13351216, 35: 3337012, 36: 764192, 37: 208410, 38: 52180, 39: 8118, 40: 3922}),
     Ship('Amarr Shuttle', 11134, {34: 2500}),
