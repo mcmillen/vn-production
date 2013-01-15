@@ -1,14 +1,47 @@
 from google.appengine.api import memcache
+from google.appengine.api import urlfetch
 
 import logging
+import os
+import re
+
 import models
+
+
+eve_marketdata_regex = re.compile(r'<\?xml version="1.0" encoding="utf-8"\?>'
+    r'<eve><price id="(\d+)">([0-9.]+)</price></eve>')
+
+
+# TODO: move the next couple functions to a utility file.
+def create_cache_key(key):
+  return '%s-%s' % (key, os.environ['CURRENT_VERSION_ID'])
+
+
+def fetch_jita_price(item_type):
+  url = 'http://eve-marketdata.com/api/item_prices_jita.xml?type_ids=%d' % (
+      item_type)
+  result = urlfetch.fetch(url)
+  if result.status_code != 200:
+    raise Exception("Can't fetch market data. :(")
+  # WHOO I AM PARSING XML WITH REGEX
+  match = eve_marketdata_regex.match(result.content)
+  if not match:
+    raise Exception('Trouble parsing eve-marketdata, tell Rethyl pls: %s' %
+                    result.content)
+  type_id = int(match.group(1))
+  if item_type != type_id:
+    raise Exception('Trouble parsing eve-marketdata, tell Rethyl pls: '
+                    '%s != %s' % (item_type, type_id))
+  price = float(match.group(2))
+  logging.debug('eve-marketdata price for %d: %f' % (type_id, price))
+  return price
 
 
 class Item(object):
   def __init__(self, name, item_type, needed_materials=None):
     self._name = name
     self._item_type = item_type
-    self._cache_key = 'material-%s' % self._name
+    self._cache_key = create_cache_key('material-%s' % self._name)
     if needed_materials:
       self._needed_materials = needed_materials
     else:
@@ -16,14 +49,14 @@ class Item(object):
 
   def _fetch_data(self):
     result = memcache.get(self._cache_key)
-    if result:
+    if result is not None:
       logging.debug('memcache hit for %s' % self._cache_key)
       return result
     logging.debug('memcache miss for %s' % self._cache_key)
     model = self._fetch_model()
     result = {'buy_price': model.buy_price,
               'desired_quantity': model.desired_quantity}
-    memcache.set(self._cache_key, result, 60 * 60 * 24)
+    memcache.set(self._cache_key, result, 60 * 60)
     return result
 
   def _fetch_model(self):
@@ -83,6 +116,24 @@ class Material(Item):
   pass
 
 
+class Mineral(Material):
+  def _calculate_buy_price(self):
+    jita_price = fetch_jita_price(self.item_type)
+    return jita_price * 0.93
+
+  def _fetch_model(self):
+    result = models.Material.all().filter('name =', self.name).get()
+    if result:
+      result.buy_price = self._calculate_buy_price()
+      return result
+    material = models.Material()
+    material.name = self.name
+    material.buy_price = self._calculate_buy_price()
+    material.desired_quantity = 0
+    material.put()
+    return material
+
+
 class Module(Item):
   pass
 
@@ -117,14 +168,14 @@ class Ship(Item):
 _ITEMS_BY_TYPE = {}
 
 _materials = [
-  Material('Tritanium', 34),
-  Material('Pyerite', 35),
-  Material('Mexallon', 36),
-  Material('Isogen', 37),
-  Material('Nocxium', 38),
-  Material('Zydrine', 39),
-  Material('Megacyte', 40),
-  Material('Morphite', 11399)
+  Mineral('Tritanium', 34),
+  Mineral('Pyerite', 35),
+  Mineral('Mexallon', 36),
+  Mineral('Isogen', 37),
+  Mineral('Nocxium', 38),
+  Mineral('Zydrine', 39),
+  Mineral('Megacyte', 40),
+  Mineral('Morphite', 11399)
 ]
 
 
