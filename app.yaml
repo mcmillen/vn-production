@@ -1,5 +1,5 @@
 application: vn-production
-version: retribution-ship-materials
+version: asset-report
 runtime: python27
 api_version: 1
 threadsafe: true
@@ -20,4 +20,5 @@ handlers:
 - url: .*
   script: handlers.app
   secure: always
+
 

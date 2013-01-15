@@ -15,6 +15,9 @@ import ores
 app = Bottle()
 
 
+MINERAL_SELL_MARKUP = 1.05
+
+
 def is_current_user_admin():
   return users.is_current_user_admin()
 
@@ -103,6 +106,7 @@ def materials_page():
                   item_quantities=item_quantities)
 
 
+# TODO: use item_db.all_materials() instead of passing it in.
 def get_buy_price(materials, name):
   ore_name = name.split()[-1]
   if ore_name == 'Ochre':
@@ -111,13 +115,13 @@ def get_buy_price(materials, name):
     return ores.ORES[ore_name].calculate_buy_price(materials, name)
   materials = dict([(material.name, material) for material in materials])
   if name not in materials:
-    abort(400, 'Invalid material: %s' % name)
+    return None
   return materials[name].buy_price
 
 
 @app.post('/materials/compute')
 def materials_compute():
-  materials = item_db.all()
+  materials = item_db.all_materials()
   # List of (material name, buy price, quantity, value).
   result = []
   total_value = 0.0
@@ -130,17 +134,19 @@ def materials_compute():
     except ValueError:
       abort(400, 'Invalid quantity of %s' % name)
     buy_price = get_buy_price(materials, name)
+    if buy_price is None:
+      abort(400, 'Invalid material: %s' % name)
     value = buy_price * quantity
     total_value += value
     result.append((name,
                    buy_price,
                    format_number(quantity),
                    format_number(value)))
-  # TODO: add sell_price to Item and use that instead of hard-coding 1.05 here.
+  # TODO: add sell_price to Item and use that instead of hard-coding here.
   return template('compute_materials.html',
                   materials=result,
                   buy_price=format_number(total_value),
-                  sell_price=format_number(total_value * 1.05))
+                  sell_price=format_number(total_value * MINERAL_SELL_MARKUP))
 
 
 @app.get('/ships')
@@ -167,19 +173,110 @@ def modules():
                   is_current_user_admin=is_current_user_admin())
 
 
+@app.get('/assets')
+def assets():
+  MASTER_WALLET_DIVISION = 1000
+  item_quantities = get_item_quantities()
+  master_wallet = get_wallet_details(MASTER_WALLET_DIVISION)
+  escrow = get_market_escrow()
+  total_cash = master_wallet + escrow
+
+  result = '<tt><pre>'
+  result += '%-21s %14s\n' % ('Master wallet', format_number(master_wallet))
+  result += '%-21s %14s\n' % ('Cash in market escrow', format_number(escrow))
+  result += '-' * 36
+  result += '\n'
+  result += '%-21s %14s\n\n' % ('Total cash', format_number(total_cash))
+
+  # TODO: separate data from display.
+  result += 'Mineral quantities:\n'
+  total_mineral_value = 0
+  for item_name in sorted(item_quantities):
+    material = item_db.get_material(item_name)
+    if not material:
+      continue
+    quantity = item_quantities[item_name]
+    # We use buy price instead of sell price here so that we don't
+    # magically print ISK when we buy minerals in bulk.  We use sell
+    # price for ships because that includes the value added by paying
+    # for blueprints, manufacturing time, etc.
+    value = material.buy_price * quantity
+    total_mineral_value += value
+    result += '%-21s %14s @ %-7.2f (%.1f%% of target)\n' % (
+        item_name,
+        format_number(value),
+        material.buy_price,
+        100.0 * quantity / material.desired_quantity)
+  result += '-' * 36
+  result += '\n'
+  result += '%-21s %14s\n\n' % (
+    'Total mineral value', format_number(total_mineral_value))
+
+  # TODO: enable this once our materials actually include ore.
+  # result += 'Ore quantities:\n'
+  # total_ore_value = 0
+  # for item_name in sorted(item_quantities):
+  #   if item_db.get_material(item_name):
+  #     continue
+  #   buy_price = get_buy_price(item_db.all_materials(), item_name)
+  #   if buy_price is None:
+  #     continue
+  #   quantity = item_quantities[item_name]
+  #   value = buy_price * quantity
+  #   total_ore_value += value
+  #   result += '%-21s %14s @ %-7.2f\n' % (
+  #       item_name, format_number(value), buy_price)
+  # result += '-' * 36
+  # result += '\n'
+  # result += '%-21s %14s\n\n' % (
+  #   'Total ore value', format_number(total_ore_value))
+
+  result += 'Ship quantities:\n'
+  total_ship_value = 0
+  for item_name in sorted(item_quantities):
+    ship = item_db.get_ship(item_name)
+    if not ship:
+      continue
+    quantity = item_quantities[item_name]
+    value = ship.sell_price * quantity
+    total_ship_value += value
+    result += '%-21s %14s @ %s each\n' % (
+        '%s x%d' % (item_name, quantity),
+        format_number(value),
+        format_number(ship.sell_price))
+
+  result += '-' * 36
+  result += '\n'
+  result += '%-21s %14s\n\n' % (
+      'Total ship value', format_number(total_ship_value))
+
+  # TODO: include value of modules that are explicitly stocked by corp.
+
+  total_assets = total_cash + + total_mineral_value + total_ship_value
+  result += '%-21s %14s' % ('Total assets', format_number(total_assets))
+  result += '</pre></tt>'
+
+  return result
+
+
 @app.get('/login')
 def login():
   redirect('/')
 
 
-def get_item_quantities():
-  materials = item_db.all()
-  material_item_types = dict((m.item_type, m.name) for m in materials)
-
+# TODO: put these data-fetching functions elsewhere.
+def get_evelink_corp():
   api_key = models.ApiKey().all().get()
   api_key = (api_key.key_id, api_key.verification_code)
   api = evelink.appengine.AppEngineAPI(api_key=api_key)
-  corp = evelink.corp.Corp(api=api)
+  return evelink.corp.Corp(api=api)
+
+
+def get_item_quantities():
+  corp = get_evelink_corp()
+
+  materials = item_db.all()
+  material_item_types = dict((m.item_type, m.name) for m in materials)
 
   items = corp.assets().values()
   item_quantities = {}
@@ -195,6 +292,23 @@ def get_item_quantities():
       item_quantities.setdefault(name, 0)
       item_quantities[name] += item['quantity']
   return item_quantities
+
+
+def get_wallet_details(division):
+  corp = get_evelink_corp()
+  wallet_info = corp.wallet_info()
+  return int(wallet_info[division]['balance'])
+
+
+def get_market_escrow():
+  corp = get_evelink_corp()
+  total_escrow = 0
+  orders = corp.orders()
+  for order in orders.values():
+    if order['type'] != 'buy':
+      continue
+    total_escrow += order['escrow']
+  return total_escrow
 
 
 bottle.run(app=app, server='gae')
