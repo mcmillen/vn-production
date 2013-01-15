@@ -1,5 +1,5 @@
 application: vn-production
-version: update-values
+version: retribution-ship-materials
 runtime: python27
 api_version: 1
 threadsafe: true
