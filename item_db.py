@@ -14,7 +14,7 @@ eve_marketdata_regex = re.compile(r'<\?xml version="1.0" encoding="utf-8"\?>'
 
 # TODO: move the next couple functions to a utility file.
 def create_cache_key(key):
-  return 'key-%s-%s' % (os.environ['CURRENT_VERSION_ID'], key)
+  return '%s-%s' % (key, os.environ['CURRENT_VERSION_ID'])
 
 
 def fetch_jita_price(item_type):
