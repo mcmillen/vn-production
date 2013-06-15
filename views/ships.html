@@ -2,7 +2,7 @@
 
 <table>
 <tr>
-  <th>Ship</th><th>Corp Sells At</th><th>Available</th><th>Desired Quantity</th>
+  <th>Ship</th><th>Corp Sells At</th><th># Available</th><th># Desired</th><th># Needed</th>
 %if is_current_user_admin:
 <th></th>
 %end
@@ -13,14 +13,17 @@
   <td>{{ formatter(ship.sell_price) }}</td>
   <td>{{ item_quantities.get(ship.name, "-") }}
   <td>
-  %if item_quantities.get(ship.name, 0) < ship.desired_quantity:
-    <font color="#f00">{{ ship.desired_quantity }}</font>
+  %if ship.desired_quantity:
+    {{ ship.desired_quantity }}
   %else:
-    %if ship.desired_quantity:
-      {{ ship.desired_quantity }}
-    %else:
-      -
-    %end
+    -
+  %end
+  </td>
+  <td>
+  %if item_quantities.get(ship.name, 0) < ship.desired_quantity:
+    <font color="#f00">{{ ship.desired_quantity - item_quantities.get(ship.name, 0) }}</font>
+  %else:
+    -
   %end
   </td>
 

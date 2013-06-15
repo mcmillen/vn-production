@@ -4,7 +4,7 @@
 <input type="submit" value="Compute Value">
 <table>
 <tr>
-  <th>Material</th><th>Corp Buys At</th><th>Corp Sells At</th><th>Quantity</th><th>Current Stock</th><th># Available For Purchase</th>
+  <th>Material</th><th>Corp Buys At</th><th>Corp Sells At</th><th>Quantity</th><th>Current Stock</th><th># Desired</th><th># Needed</th><th># Surplus</th>
 
 %if is_current_user_admin:
 <th></th>
@@ -22,7 +22,9 @@
   {{ '%.1f%%' % (100.0 * item_quantities.get(material.name, 0) / material.desired_quantity) }}
 %end
 </td>
-  <td>{{ max(0, item_quantities.get(material.name, 0) - material.desired_quantity) }}
+  <td>{{ formatter(material.desired_quantity) }}</td>
+  <td>{{ formatter(max(0, material.desired_quantity - item_quantities.get(material.name, 0))) }}</td>
+  <td>{{ formatter(max(0, item_quantities.get(material.name, 0) - material.desired_quantity)) }}
 %if is_current_user_admin:
   <td><a href="/materials/edit/{{ material.name }}">Edit</a></td>
 %end

@@ -1,5 +1,5 @@
 application: vn-production
-version: asset-report
+version: ship-prices
 runtime: python27
 api_version: 1
 threadsafe: true
