@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 
@@ -22,7 +23,7 @@ def is_current_user_admin():
   return users.is_current_user_admin()
 
 
-def format_number(amount):
+def format_commas(amount):
   amount = int(amount)
   result = ''
   if amount == 0:
@@ -34,6 +35,10 @@ def format_number(amount):
     result = '%03d' % mod + result
   result = result.lstrip('0')
   return result
+
+
+def format_magnitude(amount):
+  return '0'
 
 
 @app.get('/')
@@ -103,7 +108,8 @@ def materials_page():
                   materials=materials,
                   salvage=[],
                   ores=ore_data,
-                  item_quantities=item_quantities)
+                  item_quantities=item_quantities,
+                  formatter=format_commas)
 
 
 # TODO: use item_db.all_materials() instead of passing it in.
@@ -140,13 +146,13 @@ def materials_compute():
     total_value += value
     result.append((name,
                    buy_price,
-                   format_number(quantity),
-                   format_number(value)))
+                   format_commas(quantity),
+                   format_commas(value)))
   # TODO: add sell_price to Item and use that instead of hard-coding here.
   return template('compute_materials.html',
                   materials=result,
-                  buy_price=format_number(total_value),
-                  sell_price=format_number(total_value * MINERAL_SELL_MARKUP))
+                  buy_price=format_commas(total_value),
+                  sell_price=format_commas(total_value * MINERAL_SELL_MARKUP))
 
 
 @app.get('/ships')
@@ -159,7 +165,7 @@ def ships():
     else:
       return ship.buy_price - 1000000000
   ships.sort(key=sort_key, reverse=True)
-  return template('ships', ships=ships, formatter=format_number,
+  return template('ships', ships=ships, formatter=format_commas,
                   item_quantities=item_quantities,
                   is_current_user_admin=is_current_user_admin())
 
@@ -173,7 +179,9 @@ def modules():
                   is_current_user_admin=is_current_user_admin())
 
 
-@app.get('/assets')
+# TODO: generate the reports in a cron job and just have /assets
+# return the latest.
+@app.get('/assets/generate')
 def assets():
   MASTER_WALLET_DIVISION = 1000
   item_quantities = get_item_quantities()
@@ -182,11 +190,11 @@ def assets():
   total_cash = master_wallet + escrow
 
   result = '<tt><pre>'
-  result += '%-21s %14s\n' % ('Master wallet', format_number(master_wallet))
-  result += '%-21s %14s\n' % ('Cash in market escrow', format_number(escrow))
+  result += '%-21s %14s\n' % ('Master wallet', format_commas(master_wallet))
+  result += '%-21s %14s\n' % ('Cash in market escrow', format_commas(escrow))
   result += '-' * 36
   result += '\n'
-  result += '%-21s %14s\n\n' % ('Total cash', format_number(total_cash))
+  result += '%-21s %14s\n\n' % ('Total cash', format_commas(total_cash))
 
   # TODO: separate data from display.
   result += 'Mineral quantities:\n'
@@ -204,13 +212,13 @@ def assets():
     total_mineral_value += value
     result += '%-21s %14s @ %-7.2f (%.1f%% of target)\n' % (
         item_name,
-        format_number(value),
+        format_commas(value),
         material.buy_price,
         100.0 * quantity / material.desired_quantity)
   result += '-' * 36
   result += '\n'
   result += '%-21s %14s\n\n' % (
-    'Total mineral value', format_number(total_mineral_value))
+    'Total mineral value', format_commas(total_mineral_value))
 
   # TODO: enable this once our materials actually include ore.
   # result += 'Ore quantities:\n'
@@ -225,11 +233,11 @@ def assets():
   #   value = buy_price * quantity
   #   total_ore_value += value
   #   result += '%-21s %14s @ %-7.2f\n' % (
-  #       item_name, format_number(value), buy_price)
+  #       item_name, format_commas(value), buy_price)
   # result += '-' * 36
   # result += '\n'
   # result += '%-21s %14s\n\n' % (
-  #   'Total ore value', format_number(total_ore_value))
+  #   'Total ore value', format_commas(total_ore_value))
 
   result += 'Ship quantities:\n'
   total_ship_value = 0
@@ -242,21 +250,36 @@ def assets():
     total_ship_value += value
     result += '%-21s %14s @ %s each\n' % (
         '%s x%d' % (item_name, quantity),
-        format_number(value),
-        format_number(ship.sell_price))
+        format_commas(value),
+        format_commas(ship.sell_price))
 
   result += '-' * 36
   result += '\n'
   result += '%-21s %14s\n\n' % (
-      'Total ship value', format_number(total_ship_value))
+      'Total ship value', format_commas(total_ship_value))
 
   # TODO: include value of modules that are explicitly stocked by corp.
 
-  total_assets = total_cash + + total_mineral_value + total_ship_value
-  result += '%-21s %14s' % ('Total assets', format_number(total_assets))
+  # TODO: include line-items per item type in the report.
+  report = models.AssetReport()
+  report.cash = int(total_cash)
+  report.mineral_value = int(total_mineral_value)
+  report.ship_value = int(total_ship_value)
+  report.put()
+
+  result += '%-21s %14s' % ('Total assets', format_commas(report.total_assets))
   result += '</pre></tt>'
 
   return result
+
+@app.get('/assets')
+def assets_chart():
+  reports = models.AssetReport().all().order('-creation_time').fetch(24 * 30)
+  reports.reverse()
+  for report in reports:
+    delta = (report.creation_time - reports[0].creation_time).total_seconds()
+    report.delta = delta
+  return template('assets_chart.html', reports=reports)
 
 
 @app.get('/login')

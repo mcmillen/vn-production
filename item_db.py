@@ -147,22 +147,25 @@ class Ship(Item):
       result[material] = quantity
     return result
 
-  @property
-  def buy_price(self):
-    material_efficiency = 5
-    materials = self.production_materials(material_efficiency)
-    total_cost = 0.0
-    for material_id, quantity in materials.items():
-      total_cost += quantity * get(material_id).buy_price
-    return int(total_cost)
+  def _calculate_buy_price(self):
+    jita_price = fetch_jita_price(self.item_type)
+    return jita_price * 1.0
 
-  @buy_price.setter
-  def buy_price(self, value):
-    pass  # Intentional no-op.  Buy price is computed from materials, per above.
+  def _fetch_model(self):
+    result = models.Material.all().filter('name =', self.name).get()
+    if result:
+      result.buy_price = self._calculate_buy_price()
+      return result
+    material = models.Material()
+    material.name = self.name
+    material.buy_price = self._calculate_buy_price()
+    material.desired_quantity = 0
+    material.put()
+    return material
 
   @property
   def sell_price(self):
-    return int(self.buy_price * 1.1)
+    return int(self.buy_price * 1.05)
 
 
 _ITEMS_BY_TYPE = {}
@@ -213,6 +216,7 @@ _ITEMS_BY_TYPE.update((m.item_type, m) for m in _salvage)
 # TODO: import ships from a separate file instead of pasting them here.
 _ships = [
     Ship('Abaddon', 24692, {34: 13351216, 35: 3337012, 36: 764192, 37: 208410, 38: 52180, 39: 8118, 40: 3922}),
+    Ship('Algos', 32872, {34: 56700, 35: 15390, 36: 7290, 37: 810, 38: 189, 39: 27, 40: 3}),
     Ship('Amarr Shuttle', 11134, {34: 2500}),
     Ship('Apocalypse', 642, {34: 7577636, 35: 1894803, 36: 474674, 37: 118524, 38: 29622, 39: 7168, 40: 2683}),
     Ship('Arbitrator', 628, {34: 245790, 35: 61844, 36: 18236, 37: 4184, 38: 1001, 39: 229, 40: 55}),
@@ -234,11 +238,13 @@ _ships = [
     Ship('Celestis', 633, {34: 245798, 35: 61846, 36: 17979, 37: 4043, 38: 1004, 39: 230, 40: 48}),
     Ship('Coercer', 16236, {34: 50274, 35: 18300, 36: 4872, 37: 1023, 39: 89, 40: 18}),
     Ship('Condor', 583, {34: 1999, 35: 1422, 36: 146, 37: 68}),
+    Ship('Corax', 32876, {34: 51300, 35: 21600, 36: 7560, 37: 1431, 38: 6, 39: 6, 40: 6}),
     Ship('Cormorant', 16238, {34: 35328, 35: 10677, 36: 4596, 37: 963, 38: 299, 39: 96, 40: 8}),
     Ship('Covetor', 17476, {34: 2000000, 35: 600000, 36: 60000, 37: 17842, 38: 3972, 39: 1000, 40: 270}),
     Ship('Crucifier', 2161, {34: 11600, 35: 9858, 36: 570, 38: 2, 39: 2, 40: 3}),
     Ship('Cyclone', 16231, {34: 1623468, 35: 405001, 36: 97844, 37: 28977, 39: 1743, 40: 684}),
     Ship('Dominix', 645, {34: 4300840, 35: 1075894, 36: 270905, 37: 67399, 38: 16790, 39: 3844, 40: 1407}),
+    Ship('Dragoon', 32874, {34: 55350, 35: 14850, 36: 7020, 37: 972, 38: 216, 39: 41}),
     Ship('Drake', 24698, {34: 2444312, 35: 612070, 36: 168645, 37: 17467, 38: 12364, 39: 3603, 40: 839}),
     Ship('Executioner', 589, {34: 2752, 35: 2510, 36: 130, 37: 2}),
     Ship('Exequror', 634, {34: 204846, 35: 51605, 36: 15158, 37: 3389, 38: 845, 39: 193, 40: 48}),
@@ -289,6 +295,7 @@ _ships = [
     Ship('Slasher', 585, {40: 1, 34: 1854, 35: 918, 36: 218, 37: 10}),
     Ship('Stabber', 622, {34: 307484, 35: 77203, 36: 25832, 37: 5350, 38: 1280, 39: 269, 40: 61}),
     Ship('Talos', 4308, {34: 4327764, 35: 963567, 36: 323199, 38: 20225, 39: 3785, 40: 1854}),
+    Ship('Talwar', 32878, {34: 55350, 35: 15120, 36: 5400, 37: 864, 38: 324, 39: 41, 40: 3}),
     Ship('Tempest', 639, {34: 7372852, 35: 1843893, 36: 462643, 37: 115378, 38: 28778, 39: 6794, 40: 1957}),
     Ship('Thorax', 627, {34: 520000, 35: 130000, 36: 34124, 37: 8270, 38: 2035, 39: 510, 40: 130}),
     Ship('Thrasher', 16242, {34: 43116, 35: 10335, 36: 3579, 37: 1581, 39: 81, 40: 12}),
@@ -296,6 +303,7 @@ _ships = [
     Ship('Tornado', 4310, {34: 3945030, 35: 984155, 36: 237761, 37: 70424, 39: 4272, 40: 1662}),
     Ship('Tristan', 593, {34: 21000, 35: 5700, 36: 2700, 37: 300, 38: 70, 39: 10, 40: 1}),
     Ship('Typhoon', 644, {34: 5120040, 35: 1280694, 36: 322370, 37: 80265, 38: 19995, 39: 4678, 40: 1722}),
+    Ship('Venture', 32880, {34: 22400, 35: 6700, 36: 670, 37: 400, 38: 45, 39: 10}),
     Ship('Vexor', 626, {34: 307734, 35: 77202, 36: 26179, 37: 5349, 38: 1276, 39: 261, 40: 53}),
     Ship('Vigil', 3766, {34: 12786, 35: 3606, 36: 2130, 37: 222, 38: 34, 39: 2}),
     Ship('Wreathe', 653, {34: 20522, 35: 5518, 36: 2192, 37: 318, 38: 119, 39: 32}),

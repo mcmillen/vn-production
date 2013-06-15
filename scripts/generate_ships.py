@@ -7,6 +7,7 @@ import sys
 
 SHIP_NAMES = [
     'Abaddon',
+    'Algos',
     'Amarr Shuttle',
     'Apocalypse',
     'Arbitrator',
@@ -28,11 +29,13 @@ SHIP_NAMES = [
     'Celestis',
     'Coercer',
     'Condor',
+    'Corax',
     'Cormorant',
     'Covetor',
     'Crucifier',
     'Cyclone',
     'Dominix',
+    'Dragoon',
     'Drake',
     'Executioner',
     'Exequror',
@@ -83,6 +86,7 @@ SHIP_NAMES = [
     'Slasher',
     'Stabber',
     'Talos',
+    'Talwar',
     'Tempest',
     'Thorax',
     'Thrasher',
@@ -90,6 +94,7 @@ SHIP_NAMES = [
     'Tornado',
     'Tristan',
     'Typhoon',
+    'Venture',
     'Vexor',
     'Vigil',
     'Wreathe',
@@ -129,3 +134,4 @@ def main(args):
 
 if __name__ == '__main__':
   sys.exit(main(sys.argv[1:]))
+

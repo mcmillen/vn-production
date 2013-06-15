@@ -1,0 +1,4 @@
+cron:
+- description: assets report
+  url: /assets/generate
+  schedule: every 1 hours
