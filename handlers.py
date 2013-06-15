@@ -274,7 +274,8 @@ def assets():
 
 @app.get('/assets')
 def assets_chart():
-  reports = models.AssetReport().all().order('-creation_time').fetch(24 * 30)
+  reports = models.AssetReport().all().order('-creation_time').fetch(
+    24 * 30 * 6)
   reports.reverse()
   for report in reports:
     delta = (report.creation_time - reports[0].creation_time).total_seconds()
