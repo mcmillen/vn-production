@@ -17,6 +17,20 @@ def create_cache_key(key):
   return '%s-%s' % (key, os.environ['CURRENT_VERSION_ID'])
 
 
+def fetch_memcache(key):
+  result = memcache.get(key)
+  if result is None:
+    logging.debug('memcache miss for %s' % key)    
+  else:
+    logging.debug('memcache hit for %s' % key)
+  return result
+
+
+def set_memcache(key, value, expiry=60 * 60):
+  memcache.set(key, value, expiry)
+  logging.debug('memcache set for %s' % key)
+
+
 def fetch_jita_price(item_type):
   url = 'http://eve-marketdata.com/api/item_prices_jita.xml?type_ids=%d' % (
       item_type)
@@ -41,23 +55,11 @@ class Item(object):
   def __init__(self, name, item_type, needed_materials=None):
     self._name = name
     self._item_type = item_type
-    self._cache_key = create_cache_key('material-%s' % self._name)
+    self._cache_key_root = create_cache_key('material-%s' % self._name)
     if needed_materials:
       self._needed_materials = needed_materials
     else:
       self._needed_materials = []
-
-  def _fetch_data(self):
-    result = memcache.get(self._cache_key)
-    if result is not None:
-      logging.debug('memcache hit for %s' % self._cache_key)
-      return result
-    logging.debug('memcache miss for %s' % self._cache_key)
-    model = self._fetch_model()
-    result = {'buy_price': model.buy_price,
-              'desired_quantity': model.desired_quantity}
-    memcache.set(self._cache_key, result, 60 * 60)
-    return result
 
   def _fetch_model(self):
     result = models.Material.all().filter('name =', self.name).get()
@@ -65,7 +67,6 @@ class Item(object):
       return result
     material = models.Material()
     material.name = self.name
-    material.buy_price = 0.0
     material.desired_quantity = 0
     material.put()
     return material
@@ -77,6 +78,9 @@ class Item(object):
             'desired_quantity': self.desired_quantity,
             'current_quantity': current_quantity}
 
+  def _calculate_buy_price(self):
+    raise NotImplementedError('_calculate_buy_price() not defined')
+
   @property
   def name(self):
     return self._name
@@ -87,29 +91,41 @@ class Item(object):
 
   @property
   def buy_price(self):
-    return self._fetch_data().get('buy_price', 0)
+    key = self._cache_key_root + '-buy_price'
+    buy_price = fetch_memcache(key)
+    if buy_price is not None:
+      return buy_price
+    buy_price = self._calculate_buy_price()
+    set_memcache(key, buy_price)
+    return buy_price
 
   @buy_price.setter
   def buy_price(self, value):
     if value == self.buy_price:
       return
-    memcache.delete(self._cache_key)
-    model = self._fetch_model()
-    model.buy_price = value
-    model.put()
+    key = self._cache_key_root + '-buy_price'
+    set_memcache(key, value)
 
   @property
   def desired_quantity(self):
-    return self._fetch_data().get('desired_quantity', 0)
+    key = self._cache_key_root + '-desired_quantity'
+    desired_quantity = fetch_memcache(key)
+    if desired_quantity is not None:
+      return desired_quantity
+    model = self._fetch_model()
+    desired_quantity = model.desired_quantity
+    set_memcache(key, desired_quantity)
+    return desired_quantity
 
   @desired_quantity.setter
   def desired_quantity(self, value):
     if value == self.desired_quantity:
       return
-    memcache.delete(self._cache_key)
     model = self._fetch_model()
     model.desired_quantity = value
     model.put()
+    key = self._cache_key_root + '-desired_quantity'
+    set_memcache(key, value)
 
 
 class Material(Item):
@@ -120,18 +136,6 @@ class Mineral(Material):
   def _calculate_buy_price(self):
     jita_price = fetch_jita_price(self.item_type)
     return jita_price * 0.93
-
-  def _fetch_model(self):
-    result = models.Material.all().filter('name =', self.name).get()
-    if result:
-      result.buy_price = self._calculate_buy_price()
-      return result
-    material = models.Material()
-    material.name = self.name
-    material.buy_price = self._calculate_buy_price()
-    material.desired_quantity = 0
-    material.put()
-    return material
 
 
 class Module(Item):
@@ -150,18 +154,6 @@ class Ship(Item):
   def _calculate_buy_price(self):
     jita_price = fetch_jita_price(self.item_type)
     return jita_price * 1.0
-
-  def _fetch_model(self):
-    result = models.Material.all().filter('name =', self.name).get()
-    if result:
-      result.buy_price = self._calculate_buy_price()
-      return result
-    material = models.Material()
-    material.name = self.name
-    material.buy_price = self._calculate_buy_price()
-    material.desired_quantity = 0
-    material.put()
-    return material
 
   @property
   def sell_price(self):
