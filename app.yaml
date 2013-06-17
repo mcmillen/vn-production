@@ -1,5 +1,5 @@
 application: vn-production
-version: odyssey-ores
+version: datastore-usage
 runtime: python27
 api_version: 1
 threadsafe: true
